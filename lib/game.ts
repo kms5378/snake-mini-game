@@ -11,7 +11,7 @@ export type GameState = {
   snake: Point[];
   food: Point;
   direction: Direction;
-  pendingDirection: Direction;
+  directionQueue: Direction[];
   score: number;
   status: GameStatus;
   startedAt: number | null;
@@ -29,6 +29,7 @@ export const DEFAULT_BOARD: BoardSize = {
 };
 
 export const POINTS_PER_FOOD = 10;
+export const MAX_DIRECTION_QUEUE = 3;
 
 const directionDelta: Record<Direction, Point> = {
   up: { x: 0, y: -1 },
@@ -52,7 +53,7 @@ export function createInitialGameState(now = Date.now()): GameState {
     snake,
     food: { x: center.x + 4, y: center.y },
     direction: "right",
-    pendingDirection: "right",
+    directionQueue: [],
     score: 0,
     status: "ready",
     startedAt: now,
@@ -75,18 +76,24 @@ export function isOppositeDirection(a: Direction, b: Direction) {
 
 export function queueDirection(
   currentDirection: Direction,
-  pendingDirection: Direction,
+  directionQueue: Direction[],
   nextDirection: Direction
 ) {
-  if (isOppositeDirection(currentDirection, nextDirection)) {
-    return pendingDirection;
+  const lastQueuedDirection = directionQueue.at(-1) ?? currentDirection;
+
+  if (lastQueuedDirection === nextDirection) {
+    return directionQueue;
   }
 
-  if (isOppositeDirection(pendingDirection, nextDirection)) {
-    return pendingDirection;
+  if (isOppositeDirection(lastQueuedDirection, nextDirection)) {
+    return directionQueue;
   }
 
-  return nextDirection;
+  if (directionQueue.length >= MAX_DIRECTION_QUEUE) {
+    return directionQueue;
+  }
+
+  return [...directionQueue, nextDirection];
 }
 
 export function getNextHead(head: Point, direction: Direction): Point {
@@ -148,7 +155,8 @@ export function tickGame(
     return state;
   }
 
-  const direction = state.pendingDirection;
+  const [queuedDirection, ...remainingQueue] = state.directionQueue;
+  const direction = queuedDirection ?? state.direction;
   const nextHead = getNextHead(state.snake[0], direction);
   const ateFood = isSamePoint(nextHead, state.food);
   const nextSnake = ateFood
@@ -159,7 +167,7 @@ export function tickGame(
     return {
       ...state,
       direction,
-      pendingDirection: direction,
+      directionQueue: [],
       snake: nextSnake,
       status: "game-over",
       endedAt: now
@@ -169,7 +177,7 @@ export function tickGame(
   return {
     ...state,
     direction,
-    pendingDirection: direction,
+    directionQueue: remainingQueue,
     snake: nextSnake,
     food: ateFood ? createFood(nextSnake, board, random) : state.food,
     score: ateFood ? state.score + POINTS_PER_FOOD : state.score

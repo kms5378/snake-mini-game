@@ -19,12 +19,39 @@ function runningState(overrides: Partial<GameState> = {}): GameState {
 
 describe("snake game logic", () => {
   it("prevents immediate direction reversal from the current direction", () => {
-    expect(queueDirection("right", "right", "left")).toBe("right");
-    expect(queueDirection("up", "up", "down")).toBe("up");
+    expect(queueDirection("right", [], "left")).toEqual([]);
+    expect(queueDirection("up", [], "down")).toEqual([]);
   });
 
   it("prevents impossible reversal against a queued direction in the same tick", () => {
-    expect(queueDirection("right", "up", "down")).toBe("up");
+    expect(queueDirection("right", ["up"], "down")).toEqual(["up"]);
+  });
+
+  it("keeps rapid corner inputs queued for upcoming ticks", () => {
+    expect(queueDirection("right", ["up"], "left")).toEqual(["up", "left"]);
+  });
+
+  it("consumes queued directions one per tick", () => {
+    const state = runningState({
+      snake: [
+        { x: 10, y: 10 },
+        { x: 9, y: 10 },
+        { x: 8, y: 10 }
+      ],
+      food: { x: 5, y: 5 },
+      direction: "right",
+      directionQueue: ["up", "left"]
+    });
+
+    const first = tickGame(state, DEFAULT_BOARD, createSeededRandom(1), 2_000);
+    const second = tickGame(first, DEFAULT_BOARD, createSeededRandom(1), 2_120);
+
+    expect(first.snake[0]).toEqual({ x: 10, y: 9 });
+    expect(first.direction).toBe("up");
+    expect(first.directionQueue).toEqual(["left"]);
+    expect(second.snake[0]).toEqual({ x: 9, y: 9 });
+    expect(second.direction).toBe("left");
+    expect(second.directionQueue).toEqual([]);
   });
 
   it("moves the snake forward on each tick", () => {
@@ -35,8 +62,7 @@ describe("snake game logic", () => {
         { x: 8, y: 10 }
       ],
       food: { x: 5, y: 5 },
-      direction: "right",
-      pendingDirection: "right"
+      direction: "right"
     });
 
     const next = tickGame(state, DEFAULT_BOARD, createSeededRandom(1), 2_000);
@@ -53,8 +79,7 @@ describe("snake game logic", () => {
         { x: DEFAULT_BOARD.width - 2, y: 0 }
       ],
       food: { x: 3, y: 3 },
-      direction: "right",
-      pendingDirection: "right"
+      direction: "right"
     });
 
     const next = tickGame(state, DEFAULT_BOARD, createSeededRandom(1), 2_000);
@@ -74,7 +99,7 @@ describe("snake game logic", () => {
       ],
       food: { x: 10, y: 10 },
       direction: "up",
-      pendingDirection: "left"
+      directionQueue: ["left"]
     });
 
     const next = tickGame(state, DEFAULT_BOARD, createSeededRandom(1), 2_000);
@@ -91,7 +116,6 @@ describe("snake game logic", () => {
       ],
       food: { x: 11, y: 10 },
       direction: "right",
-      pendingDirection: "right",
       score: 20
     });
 

@@ -196,7 +196,7 @@ export function SnakeGame() {
       event.preventDefault();
       setState((current) => ({
         ...current,
-        pendingDirection: queueDirection(current.direction, current.pendingDirection, direction),
+        directionQueue: queueDirection(current.direction, current.directionQueue, direction),
         status: current.status === "ready" ? "running" : current.status
       }));
     }
@@ -235,7 +235,7 @@ export function SnakeGame() {
 
     setState((current) => ({
       ...current,
-      pendingDirection: queueDirection(current.direction, current.pendingDirection, direction),
+      directionQueue: queueDirection(current.direction, current.directionQueue, direction),
       status: current.status === "ready" ? "running" : current.status
     }));
   };
