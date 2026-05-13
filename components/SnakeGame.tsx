@@ -10,6 +10,7 @@ import {
   queueDirection,
   tickGame
 } from "@/lib/game";
+import { createGameAudio } from "@/lib/audio";
 import type { ScoreEntry } from "@/lib/score-schema";
 
 const TICK_MS = 120;
@@ -43,6 +44,9 @@ function formatDuration(ms: number) {
 export function SnakeGame() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const audioRef = useRef<ReturnType<typeof createGameAudio> | null>(null);
+  const statusRef = useRef<GameState["status"]>("ready");
+  const previousScoreRef = useRef(0);
   const [state, setState] = useState<GameState>(() => createInitialGameState());
   const [leaderboard, setLeaderboard] = useState<ScoreEntry[]>([]);
   const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
@@ -72,6 +76,41 @@ export function SnakeGame() {
   useEffect(() => {
     void loadScores();
   }, [loadScores]);
+
+  const getAudio = useCallback(() => {
+    audioRef.current ??= createGameAudio();
+    return audioRef.current;
+  }, []);
+
+  const startMusic = useCallback(() => {
+    void getAudio()?.startMusic();
+  }, [getAudio]);
+
+  const stopMusic = useCallback(() => {
+    audioRef.current?.stopMusic();
+  }, []);
+
+  useEffect(() => {
+    statusRef.current = state.status;
+
+    if (state.status !== "running") {
+      stopMusic();
+    }
+  }, [state.status, stopMusic]);
+
+  useEffect(() => {
+    if (state.score > previousScoreRef.current) {
+      getAudio()?.playScoreEffect();
+    }
+
+    previousScoreRef.current = state.score;
+  }, [getAudio, state.score]);
+
+  useEffect(() => {
+    return () => {
+      audioRef.current?.dispose();
+    };
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -147,12 +186,19 @@ export function SnakeGame() {
   }, [state.status]);
 
   const resetGame = useCallback(() => {
+    stopMusic();
     setState(createInitialGameState());
     setSubmitState("idle");
     setSubmitError(null);
-  }, []);
+  }, [stopMusic]);
 
   const toggleStartPause = useCallback(() => {
+    if (statusRef.current === "ready" || statusRef.current === "paused") {
+      startMusic();
+    } else {
+      stopMusic();
+    }
+
     setState((current) => {
       if (current.status === "game-over") {
         return createInitialGameState();
@@ -171,7 +217,7 @@ export function SnakeGame() {
         startedAt: current.startedAt ?? Date.now()
       };
     });
-  }, []);
+  }, [startMusic, stopMusic]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -186,6 +232,9 @@ export function SnakeGame() {
       }
 
       event.preventDefault();
+      if (statusRef.current === "ready") {
+        startMusic();
+      }
       setState((current) => ({
         ...current,
         directionQueue: queueDirection(current.direction, current.directionQueue, direction),
@@ -195,7 +244,7 @@ export function SnakeGame() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [toggleStartPause]);
+  }, [startMusic, toggleStartPause]);
 
   const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
     touchStartRef.current = { x: event.clientX, y: event.clientY };
@@ -224,6 +273,10 @@ export function SnakeGame() {
         : deltaY > 0
           ? "down"
           : "up";
+
+    if (statusRef.current === "ready") {
+      startMusic();
+    }
 
     setState((current) => ({
       ...current,
