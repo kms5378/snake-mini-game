@@ -132,14 +132,6 @@ export function SnakeGame() {
     );
     context.fill();
 
-    if (state.status === "ready" || state.status === "paused") {
-      context.fillStyle = "rgba(5, 8, 12, 0.58)";
-      context.fillRect(0, 0, rect.width, rect.height);
-      context.fillStyle = "#f5f7fb";
-      context.textAlign = "center";
-      context.font = "700 22px system-ui";
-      context.fillText(state.status === "ready" ? "Start" : "Paused", rect.width / 2, rect.height / 2);
-    }
   }, [state]);
 
   useEffect(() => {
@@ -305,6 +297,16 @@ export function SnakeGame() {
             aria-label="Snake board"
           >
             <canvas ref={canvasRef} aria-label="Snake canvas" />
+            {state.status === "ready" || state.status === "paused" ? (
+              <button
+                aria-label={state.status === "ready" ? "Start game from board" : "Resume game from board"}
+                className="board-overlay"
+                onClick={toggleStartPause}
+                type="button"
+              >
+                <span>{state.status === "ready" ? "Start" : "Paused"}</span>
+              </button>
+            ) : null}
           </div>
 
           <div className="controls">
