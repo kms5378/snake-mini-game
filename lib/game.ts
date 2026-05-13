@@ -10,12 +10,15 @@ export type GameStatus = "ready" | "running" | "paused" | "game-over";
 export type GameState = {
   snake: Point[];
   food: Point;
+  obstacles: Point[];
   direction: Direction;
   directionQueue: Direction[];
   score: number;
   status: GameStatus;
   startedAt: number | null;
   endedAt: number | null;
+  nextObstacleAt: number | null;
+  obstaclesUntil: number | null;
 };
 
 export type BoardSize = {
@@ -34,6 +37,12 @@ export const BASE_TICK_MS = 120;
 export const MIN_TICK_MS = 65;
 export const SPEED_UP_EVERY_SCORE = 50;
 export const SPEED_STEP_MS = 8;
+export const OBSTACLE_MIN_DELAY_MS = 4_000;
+export const OBSTACLE_MAX_DELAY_MS = 8_000;
+export const OBSTACLE_MIN_DURATION_MS = 2_800;
+export const OBSTACLE_MAX_DURATION_MS = 4_200;
+export const OBSTACLE_MIN_COUNT = 4;
+export const OBSTACLE_MAX_COUNT = 7;
 
 const directionDelta: Record<Direction, Point> = {
   up: { x: 0, y: -1 },
@@ -56,12 +65,15 @@ export function createInitialGameState(now = Date.now()): GameState {
   return {
     snake,
     food: { x: center.x + 4, y: center.y },
+    obstacles: [],
     direction: "right",
     directionQueue: [],
     score: 0,
     status: "ready",
     startedAt: now,
-    endedAt: null
+    endedAt: null,
+    nextObstacleAt: null,
+    obstaclesUntil: null
   };
 }
 
@@ -116,6 +128,22 @@ export function getTickMs(score: number) {
   return Math.max(MIN_TICK_MS, BASE_TICK_MS - (getSpeedLevel(score) - 1) * SPEED_STEP_MS);
 }
 
+function randomInt(min: number, max: number, random: () => number) {
+  return Math.floor(random() * (max - min + 1)) + min;
+}
+
+export function getObstacleDelayMs(random: () => number = Math.random) {
+  return randomInt(OBSTACLE_MIN_DELAY_MS, OBSTACLE_MAX_DELAY_MS, random);
+}
+
+export function getObstacleDurationMs(random: () => number = Math.random) {
+  return randomInt(OBSTACLE_MIN_DURATION_MS, OBSTACLE_MAX_DURATION_MS, random);
+}
+
+export function getObstacleCount(random: () => number = Math.random) {
+  return randomInt(OBSTACLE_MIN_COUNT, OBSTACLE_MAX_COUNT, random);
+}
+
 export function isOutOfBounds(point: Point, board: BoardSize = DEFAULT_BOARD) {
   return point.x < 0 || point.y < 0 || point.x >= board.width || point.y >= board.height;
 }
@@ -123,6 +151,10 @@ export function isOutOfBounds(point: Point, board: BoardSize = DEFAULT_BOARD) {
 export function hasSelfCollision(snake: Point[]) {
   const [head, ...body] = snake;
   return body.some((part) => isSamePoint(part, head));
+}
+
+export function hasObstacleCollision(head: Point, obstacles: Point[]) {
+  return obstacles.some((obstacle) => isSamePoint(obstacle, head));
 }
 
 export function createSeededRandom(seed: number) {
@@ -137,9 +169,10 @@ export function createSeededRandom(seed: number) {
 export function createFood(
   snake: Point[],
   board: BoardSize = DEFAULT_BOARD,
-  random: () => number = Math.random
+  random: () => number = Math.random,
+  obstacles: Point[] = []
 ): Point {
-  const occupied = new Set(snake.map((point) => `${point.x}:${point.y}`));
+  const occupied = new Set([...snake, ...obstacles].map((point) => `${point.x}:${point.y}`));
   const freeCells: Point[] = [];
 
   for (let y = 0; y < board.height; y += 1) {
@@ -157,6 +190,74 @@ export function createFood(
   return freeCells[Math.floor(random() * freeCells.length)];
 }
 
+export function createObstacles(
+  blockedPoints: Point[],
+  board: BoardSize = DEFAULT_BOARD,
+  random: () => number = Math.random,
+  count = getObstacleCount(random)
+): Point[] {
+  const blocked = new Set(blockedPoints.map((point) => `${point.x}:${point.y}`));
+  const freeCells: Point[] = [];
+
+  for (let y = 0; y < board.height; y += 1) {
+    for (let x = 0; x < board.width; x += 1) {
+      if (!blocked.has(`${x}:${y}`)) {
+        freeCells.push({ x, y });
+      }
+    }
+  }
+
+  const obstacles: Point[] = [];
+
+  while (freeCells.length > 0 && obstacles.length < count) {
+    const index = Math.floor(random() * freeCells.length);
+    const [obstacle] = freeCells.splice(index, 1);
+    obstacles.push(obstacle);
+  }
+
+  return obstacles;
+}
+
+function clearExpiredObstacles(state: GameState, random: () => number, now: number): GameState {
+  if (state.obstaclesUntil === null || now < state.obstaclesUntil) {
+    return state;
+  }
+
+  return {
+    ...state,
+    obstacles: [],
+    obstaclesUntil: null,
+    nextObstacleAt: now + getObstacleDelayMs(random)
+  };
+}
+
+function maybeStartObstacleEvent(
+  state: GameState,
+  board: BoardSize,
+  random: () => number,
+  now: number
+): GameState {
+  if (state.obstacles.length > 0) {
+    return state;
+  }
+
+  const nextObstacleAt = state.nextObstacleAt ?? now + getObstacleDelayMs(random);
+
+  if (now < nextObstacleAt) {
+    return {
+      ...state,
+      nextObstacleAt
+    };
+  }
+
+  return {
+    ...state,
+    obstacles: createObstacles([...state.snake, state.food], board, random),
+    nextObstacleAt: null,
+    obstaclesUntil: now + getObstacleDurationMs(random)
+  };
+}
+
 export function tickGame(
   state: GameState,
   board: BoardSize = DEFAULT_BOARD,
@@ -167,17 +268,22 @@ export function tickGame(
     return state;
   }
 
-  const [queuedDirection, ...remainingQueue] = state.directionQueue;
-  const direction = queuedDirection ?? state.direction;
-  const nextHead = getNextHead(state.snake[0], direction);
-  const ateFood = isSamePoint(nextHead, state.food);
+  const activeState = clearExpiredObstacles(state, random, now);
+  const [queuedDirection, ...remainingQueue] = activeState.directionQueue;
+  const direction = queuedDirection ?? activeState.direction;
+  const nextHead = getNextHead(activeState.snake[0], direction);
+  const ateFood = isSamePoint(nextHead, activeState.food);
   const nextSnake = ateFood
-    ? [nextHead, ...state.snake]
-    : [nextHead, ...state.snake.slice(0, -1)];
+    ? [nextHead, ...activeState.snake]
+    : [nextHead, ...activeState.snake.slice(0, -1)];
 
-  if (isOutOfBounds(nextHead, board) || hasSelfCollision(nextSnake)) {
+  if (
+    isOutOfBounds(nextHead, board) ||
+    hasSelfCollision(nextSnake) ||
+    hasObstacleCollision(nextHead, activeState.obstacles)
+  ) {
     return {
-      ...state,
+      ...activeState,
       direction,
       directionQueue: [],
       snake: nextSnake,
@@ -186,14 +292,23 @@ export function tickGame(
     };
   }
 
-  return {
-    ...state,
-    direction,
-    directionQueue: remainingQueue,
-    snake: nextSnake,
-    food: ateFood ? createFood(nextSnake, board, random) : state.food,
-    score: ateFood ? state.score + POINTS_PER_FOOD : state.score
-  };
+  const nextFood = ateFood
+    ? createFood(nextSnake, board, random, activeState.obstacles)
+    : activeState.food;
+
+  return maybeStartObstacleEvent(
+    {
+      ...activeState,
+      direction,
+      directionQueue: remainingQueue,
+      snake: nextSnake,
+      food: nextFood,
+      score: ateFood ? activeState.score + POINTS_PER_FOOD : activeState.score
+    },
+    board,
+    random,
+    now
+  );
 }
 
 export function getDurationMs(state: Pick<GameState, "startedAt" | "endedAt">, now = Date.now()) {

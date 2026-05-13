@@ -4,6 +4,7 @@ import {
   GameState,
   createFood,
   createInitialGameState,
+  createObstacles,
   createSeededRandom,
   getSpeedLevel,
   getTickMs,
@@ -138,6 +139,86 @@ describe("snake game logic", () => {
     const food = createFood(snake, { width: 3, height: 2 }, () => 0);
 
     expect(snake).not.toContainEqual(food);
+  });
+
+  it("does not create food on an obstacle", () => {
+    const snake = [{ x: 0, y: 0 }];
+    const obstacles = [{ x: 1, y: 0 }];
+
+    const food = createFood(snake, { width: 3, height: 1 }, () => 0, obstacles);
+
+    expect(food).toEqual({ x: 2, y: 0 });
+  });
+
+  it("creates obstacles away from blocked cells", () => {
+    const blocked = [
+      { x: 0, y: 0 },
+      { x: 1, y: 0 }
+    ];
+
+    const obstacles = createObstacles(blocked, { width: 4, height: 2 }, () => 0, 3);
+
+    expect(obstacles).toHaveLength(3);
+    expect(obstacles).not.toContainEqual({ x: 0, y: 0 });
+    expect(obstacles).not.toContainEqual({ x: 1, y: 0 });
+    expect(new Set(obstacles.map((point) => `${point.x}:${point.y}`))).toHaveProperty("size", 3);
+  });
+
+  it("schedules the first obstacle event after the game starts", () => {
+    const state = runningState();
+
+    const next = tickGame(state, DEFAULT_BOARD, () => 0, 1_000);
+
+    expect(next.obstacles).toEqual([]);
+    expect(next.nextObstacleAt).toBe(5_000);
+    expect(next.obstaclesUntil).toBeNull();
+  });
+
+  it("spawns temporary obstacles when the event time arrives", () => {
+    const state = runningState({
+      nextObstacleAt: 1_000
+    });
+
+    const next = tickGame(state, DEFAULT_BOARD, () => 0, 1_000);
+
+    expect(next.obstacles).toHaveLength(4);
+    expect(next.obstaclesUntil).toBe(3_800);
+    expect(next.nextObstacleAt).toBeNull();
+    expect(next.obstacles).not.toContainEqual(next.food);
+    next.snake.forEach((part) => {
+      expect(next.obstacles).not.toContainEqual(part);
+    });
+  });
+
+  it("clears obstacles after their visible duration and schedules another event", () => {
+    const state = runningState({
+      obstacles: [{ x: 2, y: 2 }],
+      obstaclesUntil: 1_000
+    });
+
+    const next = tickGame(state, DEFAULT_BOARD, () => 0, 1_000);
+
+    expect(next.obstacles).toEqual([]);
+    expect(next.obstaclesUntil).toBeNull();
+    expect(next.nextObstacleAt).toBe(5_000);
+  });
+
+  it("ends the game when the snake hits an obstacle", () => {
+    const state = runningState({
+      snake: [
+        { x: 10, y: 10 },
+        { x: 9, y: 10 },
+        { x: 8, y: 10 }
+      ],
+      food: { x: 3, y: 3 },
+      obstacles: [{ x: 11, y: 10 }],
+      direction: "right"
+    });
+
+    const next = tickGame(state, DEFAULT_BOARD, createSeededRandom(1), 2_000);
+
+    expect(next.status).toBe("game-over");
+    expect(next.endedAt).toBe(2_000);
   });
 
   it("keeps a non-running state unchanged on tick", () => {

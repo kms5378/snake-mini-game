@@ -163,6 +163,17 @@ export function SnakeGame() {
       );
     });
 
+    state.obstacles.forEach((obstacle) => {
+      const x = obstacle.x * cellSize;
+      const y = obstacle.y * cellSize;
+
+      context.fillStyle = "#f9c74f";
+      context.fillRect(x + 3, y + 3, cellSize - 6, cellSize - 6);
+      context.fillStyle = "#7a4b00";
+      context.fillRect(x + 6, y + 6, cellSize - 12, Math.max(3, cellSize * 0.12));
+      context.fillRect(x + 6, y + cellSize - 10, cellSize - 12, Math.max(3, cellSize * 0.12));
+    });
+
     context.fillStyle = "#ff5c7a";
     context.beginPath();
     context.arc(
