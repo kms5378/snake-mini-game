@@ -6,6 +6,7 @@ import {
   createInitialGameState,
   createObstacles,
   createSeededRandom,
+  getObstacleCount,
   getSpeedLevel,
   getTickMs,
   queueDirection,
@@ -164,6 +165,14 @@ describe("snake game logic", () => {
     expect(new Set(obstacles.map((point) => `${point.x}:${point.y}`))).toHaveProperty("size", 3);
   });
 
+  it("increases obstacle count range as level rises", () => {
+    expect(getObstacleCount(0, () => 0)).toBe(4);
+    expect(getObstacleCount(0, () => 0.999)).toBe(7);
+    expect(getObstacleCount(100, () => 0)).toBe(6);
+    expect(getObstacleCount(100, () => 0.999)).toBe(9);
+    expect(getObstacleCount(1_000, () => 0.999)).toBe(14);
+  });
+
   it("schedules the first obstacle event after the game starts", () => {
     const state = runningState();
 
@@ -188,6 +197,17 @@ describe("snake game logic", () => {
     next.snake.forEach((part) => {
       expect(next.obstacles).not.toContainEqual(part);
     });
+  });
+
+  it("spawns more obstacles at higher levels", () => {
+    const state = runningState({
+      nextObstacleAt: 1_000,
+      score: 100
+    });
+
+    const next = tickGame(state, DEFAULT_BOARD, () => 0, 1_000);
+
+    expect(next.obstacles).toHaveLength(6);
   });
 
   it("clears obstacles after their visible duration and schedules another event", () => {

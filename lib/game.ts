@@ -43,6 +43,8 @@ export const OBSTACLE_MIN_DURATION_MS = 2_800;
 export const OBSTACLE_MAX_DURATION_MS = 4_200;
 export const OBSTACLE_MIN_COUNT = 4;
 export const OBSTACLE_MAX_COUNT = 7;
+export const OBSTACLE_COUNT_LEVEL_STEP = 1;
+export const OBSTACLE_COUNT_CAP = 14;
 
 const directionDelta: Record<Direction, Point> = {
   up: { x: 0, y: -1 },
@@ -140,8 +142,12 @@ export function getObstacleDurationMs(random: () => number = Math.random) {
   return randomInt(OBSTACLE_MIN_DURATION_MS, OBSTACLE_MAX_DURATION_MS, random);
 }
 
-export function getObstacleCount(random: () => number = Math.random) {
-  return randomInt(OBSTACLE_MIN_COUNT, OBSTACLE_MAX_COUNT, random);
+export function getObstacleCount(score = 0, random: () => number = Math.random) {
+  const levelBonus = (getSpeedLevel(score) - 1) * OBSTACLE_COUNT_LEVEL_STEP;
+  const minCount = Math.min(OBSTACLE_COUNT_CAP, OBSTACLE_MIN_COUNT + levelBonus);
+  const maxCount = Math.min(OBSTACLE_COUNT_CAP, OBSTACLE_MAX_COUNT + levelBonus);
+
+  return randomInt(minCount, maxCount, random);
 }
 
 export function isOutOfBounds(point: Point, board: BoardSize = DEFAULT_BOARD) {
@@ -194,7 +200,7 @@ export function createObstacles(
   blockedPoints: Point[],
   board: BoardSize = DEFAULT_BOARD,
   random: () => number = Math.random,
-  count = getObstacleCount(random)
+  count = getObstacleCount(0, random)
 ): Point[] {
   const blocked = new Set(blockedPoints.map((point) => `${point.x}:${point.y}`));
   const freeCells: Point[] = [];
@@ -252,7 +258,12 @@ function maybeStartObstacleEvent(
 
   return {
     ...state,
-    obstacles: createObstacles([...state.snake, state.food], board, random),
+    obstacles: createObstacles(
+      [...state.snake, state.food],
+      board,
+      random,
+      getObstacleCount(state.score, random)
+    ),
     nextObstacleAt: null,
     obstaclesUntil: now + getObstacleDurationMs(random)
   };
