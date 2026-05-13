@@ -5,6 +5,8 @@ import {
   createFood,
   createInitialGameState,
   createSeededRandom,
+  getSpeedLevel,
+  getTickMs,
   queueDirection,
   tickGame
 } from "@/lib/game";
@@ -142,5 +144,19 @@ describe("snake game logic", () => {
     const state = createInitialGameState(1_000);
 
     expect(tickGame(state)).toBe(state);
+  });
+
+  it("raises speed level every 50 points", () => {
+    expect(getSpeedLevel(0)).toBe(1);
+    expect(getSpeedLevel(49)).toBe(1);
+    expect(getSpeedLevel(50)).toBe(2);
+    expect(getSpeedLevel(100)).toBe(3);
+  });
+
+  it("reduces tick interval by level with a minimum cap", () => {
+    expect(getTickMs(0)).toBe(120);
+    expect(getTickMs(50)).toBe(112);
+    expect(getTickMs(100)).toBe(104);
+    expect(getTickMs(1_000)).toBe(65);
   });
 });

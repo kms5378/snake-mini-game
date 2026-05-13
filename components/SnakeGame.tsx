@@ -7,13 +7,14 @@ import {
   GameState,
   createInitialGameState,
   getDurationMs,
+  getSpeedLevel,
+  getTickMs,
   queueDirection,
   tickGame
 } from "@/lib/game";
 import { createGameAudio } from "@/lib/audio";
 import type { ScoreEntry } from "@/lib/score-schema";
 
-const TICK_MS = 120;
 const CELL_GAP = 1;
 
 type SubmitState = "idle" | "submitting" | "submitted" | "error";
@@ -55,6 +56,8 @@ export function SnakeGame() {
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const durationMs = useMemo(() => getDurationMs(state), [state]);
+  const speedLevel = useMemo(() => getSpeedLevel(state.score), [state.score]);
+  const tickMs = useMemo(() => getTickMs(state.score), [state.score]);
   const showSubmitModal = state.status === "game-over" && submitState !== "submitted";
 
   const loadScores = useCallback(async () => {
@@ -180,10 +183,10 @@ export function SnakeGame() {
 
     const timer = window.setInterval(() => {
       setState((current) => tickGame(current));
-    }, TICK_MS);
+    }, tickMs);
 
     return () => window.clearInterval(timer);
-  }, [state.status]);
+  }, [state.status, tickMs]);
 
   const resetGame = useCallback(() => {
     stopMusic();
@@ -332,8 +335,8 @@ export function SnakeGame() {
                 <strong>{state.score}</strong>
               </div>
               <div className="stat">
-                <span>Length</span>
-                <strong>{state.snake.length}</strong>
+                <span>Level</span>
+                <strong>{speedLevel}</strong>
               </div>
               <div className="stat">
                 <span>Time</span>

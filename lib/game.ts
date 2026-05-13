@@ -30,6 +30,10 @@ export const DEFAULT_BOARD: BoardSize = {
 
 export const POINTS_PER_FOOD = 10;
 export const MAX_DIRECTION_QUEUE = 3;
+export const BASE_TICK_MS = 120;
+export const MIN_TICK_MS = 65;
+export const SPEED_UP_EVERY_SCORE = 50;
+export const SPEED_STEP_MS = 8;
 
 const directionDelta: Record<Direction, Point> = {
   up: { x: 0, y: -1 },
@@ -102,6 +106,14 @@ export function getNextHead(head: Point, direction: Direction): Point {
     x: head.x + delta.x,
     y: head.y + delta.y
   };
+}
+
+export function getSpeedLevel(score: number) {
+  return Math.floor(Math.max(0, score) / SPEED_UP_EVERY_SCORE) + 1;
+}
+
+export function getTickMs(score: number) {
+  return Math.max(MIN_TICK_MS, BASE_TICK_MS - (getSpeedLevel(score) - 1) * SPEED_STEP_MS);
 }
 
 export function isOutOfBounds(point: Point, board: BoardSize = DEFAULT_BOARD) {
